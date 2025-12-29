@@ -94,6 +94,7 @@ exchangeNorm = {
     'new york stock exchange': 'NYSE',
     'nasdaq global select market': 'NASDAQ',
     'nasdaq stock market': 'NASDAQ',
+    'nasdaq global market': 'NASDAQ',
     'box exchange': 'BOX',
     'nasdaq bx': 'BX',
     'cboe c2 exchange': 'C2',
@@ -164,9 +165,26 @@ stateNormUS = {
     'virginia': 'VA',
     'washington': 'WA',
     'washington dc': 'DC',
+    'district of columbia': 'DC',
     'west virginia': 'WV',
     'wisconsin': 'WI',
-    'wyoming': 'WY',
+    'wyoming': 'WY'
+}
+
+stateNormCA = {
+'newfoundland and labrador':'NL',
+'prince edward island':'PE',
+'nova scotia':'NS',
+'new brunswick':'NB',
+'quebec':'QC',
+'ontario':'ON',
+'manitoba':'MB',
+'saskatchewan':'SK',
+'alberta':'AB',
+'british columbia':'BC',
+'yukon':'YT',
+'northwest territories':'NT',
+'nunavut':'NU'
 }
 
 
@@ -293,6 +311,8 @@ def durMonth(arg: str) -> str:
     remainingDays: int = round((monthDec - fullMonths) * 30)
     return f"{'P' if pos else '-P'}{fullMonths}M{remainingDays}D"
 
+def durDay(arg: str) -> str:
+    return f"{arg}D"
 
 def durWordSen(arg: str) -> str:
     value = replace_text_numbers(arg)
@@ -311,7 +331,7 @@ def durWordSen(arg: str) -> str:
 
 
 def numWordSen(arg: str) -> str:
-    if arg == 'no' or arg == 'none':
+    if arg == 'no' or arg == 'none' or arg == 'nil':
         return '0'
     else:
         arg = arg.replace(' and ', ' ')
@@ -348,14 +368,28 @@ def stateNameEN(arg: str) -> str:
     # remove any commas, points e.t.c
     name = re.sub(r'[^\w\s\d]', '', name.strip().lower())
     try:
-        return stateNormUS[name]
+        if name in stateNormUS:
+            return stateNormUS[name]
+        return stateNormCA[name]
     except KeyError:
         raise TransformationException(f'Unknown US State "{arg}"')
+    
+def countryNameEN(arg: str) -> str:
+    name = arg.lower().strip()
+    # remove any commas, points e.t.c
+    name = re.sub(r'[^\w\s\d]', '', name.strip().lower())
+    return name
 
+def edgarProvCountryEN(arg: str) -> str:
+    name = arg.lower().strip()
+    # remove any commas, points e.t.c
+    name = re.sub(r'[^\w\s\d]', '', name.strip().lower())
+    return name
 
 def entityFilerCategoryEN(arg: str) -> str:
     # large accelerated filer -> Large Accelerated Filer
     arg = arg.lower().strip()
+    arg = arg.replace(u'\xa0', u' ')
     if arg == 'large accelerated filer':
         return 'Large Accelerated Filer'
     elif arg == 'accelerated filer':
@@ -519,7 +553,7 @@ ixt4 = {
     'date-monthname-year-da': notImplemented,
     'date-monthname-year-de': notImplemented,
     'date-monthname-year-el': notImplemented,
-    'date-monthname-year-en': notImplemented,
+    'date-monthname-year-en': dateMonthYearEN,
     'date-monthname-year-es': notImplemented,
     'date-monthname-year-et': notImplemented,
     'date-monthname-year-fi': notImplemented,
@@ -554,12 +588,115 @@ ixt4 = {
     'num-unit-decimal': notImplemented,
 }
 
+ixt5 = {
+    'date-day-month': dateDayMonth,
+    'date-day-month-year': dateDayMonthYear,
+    'date-day-monthname-bg': notImplemented,
+    'date-day-monthname-cs': notImplemented,
+    'date-day-monthname-cy': notImplemented,
+    'date-day-monthname-da': notImplemented,
+    'date-day-monthname-de': notImplemented,
+    'date-day-monthname-el': notImplemented,
+    'date-day-monthname-en': dateDayMonthEN,
+    'date-day-monthname-es': notImplemented,
+    'date-day-monthname-et': notImplemented,
+    'date-day-monthname-fi': notImplemented,
+    'date-day-monthname-fr': notImplemented,
+    'date-day-monthname-hr': notImplemented,
+    'date-day-monthname-it': notImplemented,
+    'date-day-monthname-lv': notImplemented,
+    'date-day-monthname-nl': notImplemented,
+    'date-day-monthname-no': notImplemented,
+    'date-day-monthname-pl': notImplemented,
+    'date-day-monthname-pt': notImplemented,
+    'date-day-monthname-ro': notImplemented,
+    'date-day-monthname-sk': notImplemented,
+    'date-day-monthname-sl': notImplemented,
+    'date-day-monthname-sv': notImplemented,
+    'date-day-monthname-year-bg': notImplemented,
+    'date-day-monthname-year-cs': notImplemented,
+    'date-day-monthname-year-cy': notImplemented,
+    'date-day-monthname-year-da': notImplemented,
+    'date-day-monthname-year-de': notImplemented,
+    'date-day-monthname-year-el': notImplemented,
+    'date-day-monthname-year-en': dateDayMonthYearEN,
+    'date-day-monthname-year-es': notImplemented,
+    'date-day-monthname-year-et': notImplemented,
+    'date-day-monthname-year-fi': notImplemented,
+    'date-day-monthname-year-fr': notImplemented,
+    'date-day-monthname-year-hi': notImplemented,
+    'date-day-monthname-year-hr': notImplemented,
+    'date-day-monthname-year-it': notImplemented,
+    'date-day-monthname-year-nl': notImplemented,
+    'date-day-monthname-year-no': notImplemented,
+    'date-day-monthname-year-pl': notImplemented,
+    'date-day-monthname-year-pt': notImplemented,
+    'date-day-monthname-year-ro': notImplemented,
+    'date-day-monthname-year-sk': notImplemented,
+    'date-day-monthname-year-sl': notImplemented,
+    'date-day-monthname-year-sv': notImplemented,
+    'date-day-monthroman': notImplemented,
+    'date-day-monthroman-year': notImplemented,
+    'date-ind-day-monthname-year-hi': notImplemented,
+    'date-jpn-era-year-month': notImplemented,
+    'date-jpn-era-year-month-day': notImplemented,
+    'date-month-day': dateMonthDay,
+    'date-month-day-year': dateMonthDayYear,
+    'date-month-year': dateMonthYear,
+    'date-monthname-day-en': dateMonthDayEN,
+    'date-monthname-day-hu': notImplemented,
+    'date-monthname-day-lt': notImplemented,
+    'date-monthname-day-year-en': dateMonthDayYearEN,
+    'date-monthname-year-bg': notImplemented,
+    'date-monthname-year-cs': notImplemented,
+    'date-monthname-year-cy': notImplemented,
+    'date-monthname-year-da': notImplemented,
+    'date-monthname-year-de': notImplemented,
+    'date-monthname-year-el': notImplemented,
+    'date-monthname-year-en': dateMonthYearEN,
+    'date-monthname-year-es': notImplemented,
+    'date-monthname-year-et': notImplemented,
+    'date-monthname-year-fi': notImplemented,
+    'date-monthname-year-fr': notImplemented,
+    'date-monthname-year-hi': notImplemented,
+    'date-monthname-year-hr': notImplemented,
+    'date-monthname-year-it': notImplemented,
+    'date-monthname-year-nl': notImplemented,
+    'date-monthname-year-no': notImplemented,
+    'date-monthname-year-pl': notImplemented,
+    'date-monthname-year-pt': notImplemented,
+    'date-monthname-year-ro': notImplemented,
+    'date-monthname-year-sk': notImplemented,
+    'date-monthname-year-sl': notImplemented,
+    'date-monthname-year-sv': notImplemented,
+    'date-monthroman-year': notImplemented,
+    'date-year-day-monthname-lv': notImplemented,
+    'date-year-month': dateYearMonth,
+    'date-year-month-day': dateYearMonthDay,
+    'date-year-monthname-day-hu': notImplemented,
+    'date-year-monthname-day-lt': notImplemented,
+    'date-year-monthname-en': dateYearMonthEN,
+    'date-year-monthname-hu': notImplemented,
+    'date-year-monthname-lt': notImplemented,
+    'date-year-monthname-lv': notImplemented,
+    'fixed-empty': lambda arg: '',
+    'fixed-false': lambda arg: 'false',
+    'fixed-true': lambda arg: 'true',
+    'fixed-zero': lambda arg: '0',
+    'num-comma-decimal': numCommaDecimal,
+    'num-dot-decimal': numDotDecimal,
+    'num-unit-decimal': notImplemented,
+    'num-comma-decimal-apos': notImplemented,
+    'num-dot-decimal-apos': notImplemented,
+    'num-unit-decimal-apos': notImplemented
+}
+
 # As defined in https://www.sec.gov/info/edgar/specifications/edgarfm-vol2-v59.pdf
 ixt_sec = {
     'duryear': durYear,
     'durmonth': durMonth,
     'durweek': notImplemented,
-    'durday': notImplemented,
+    'durday': durDay,
     'durhour': notImplemented,
     'durwordsen': durWordSen,
     'numwordsen': numWordSen,
@@ -567,8 +704,8 @@ ixt_sec = {
     'boolballotbox': ballotBox,
     'exchnameen': exchNameEN,
     'stateprovnameen': stateNameEN,
-    'countrynameen': notImplemented,
-    'edgarprovcountryen': notImplemented,
+    'countrynameen': countryNameEN,
+    'edgarprovcountryen': edgarProvCountryEN,
     'entityfilercategoryen': entityFilerCategoryEN,
 }
 
@@ -589,6 +726,8 @@ def normalize(namespace: str, formatCode: str, value: str) -> str:
             return ixt3[formatCode](value)
         elif namespace == 'http://www.xbrl.org/inlineXBRL/transformation/2020-02-12':
             return ixt4[formatCode](value)
+        elif namespace == 'http://www.xbrl.org/inlineXBRL/transformation/2022-02-16':
+            return ixt5[formatCode](value)
         elif namespace == 'http://www.sec.gov/inlineXBRL/transformation/2015-08-31':
             return ixt_sec[formatCode](value)
         else:

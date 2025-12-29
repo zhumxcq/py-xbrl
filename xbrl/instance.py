@@ -410,7 +410,7 @@ def parse_xbrl(instance_path: str, cache: HttpCache, instance_url: str or None =
     return XbrlInstance(instance_url if instance_url else instance_path, taxonomy, facts, context_dir, unit_dir)
 
 
-def parse_ixbrl_url(instance_url: str, cache: HttpCache, encoding: str or None = None) -> XbrlInstance:
+def parse_ixbrl_url(instance_url: str, cache: HttpCache, encoding: str or None = None, exception_on_transform_error: bool = False) -> XbrlInstance:
     """
     Parses a inline XBRL (iXBRL) instance file.
 
@@ -420,11 +420,11 @@ def parse_ixbrl_url(instance_url: str, cache: HttpCache, encoding: str or None =
     :return: parsed XbrlInstance object containing all facts with additional information
     """
     instance_path: str = cache.cache_file(instance_url)
-    return parse_ixbrl(instance_path, cache, instance_url, encoding)
+    return parse_ixbrl(instance_path, cache, instance_url, encoding, None, exception_on_transform_error)
 
 
 def parse_ixbrl(instance_path: str, cache: HttpCache, instance_url: str or None = None, encoding=None,
-                schema_root=None) -> XbrlInstance:
+                schema_root=None, exception_on_transform_error: bool = False) -> XbrlInstance:
     """
     Parses a inline XBRL (iXBRL) instance file.
 
@@ -495,7 +495,7 @@ def parse_ixbrl(instance_path: str, cache: HttpCache, instance_url: str or None 
         # ixbrl values are not normalized! They are formatted (i.e. 123,000,000)
 
         if fact_elem.tag == '{' + ns_map['ix'] + '}nonFraction':
-            fact_value: float or None = _extract_non_fraction_value(fact_elem)
+            fact_value: float or None = _extract_non_fraction_value(fact_elem, exception_on_transform_error)
 
             unit: AbstractUnit = unit_dir[fact_elem.attrib['unitRef'].strip()]
             decimals_text: str = str(fact_elem.attrib['decimals']).strip() if 'decimals' in fact_elem.attrib else '0'
@@ -503,13 +503,13 @@ def parse_ixbrl(instance_path: str, cache: HttpCache, instance_url: str or None 
 
             facts.append(NumericFact(concept, context, fact_value, unit, decimals, xml_id))
         elif fact_elem.tag == '{' + ns_map['ix'] + '}nonNumeric':
-            fact_value: str = _extract_non_numeric_value(fact_elem)
+            fact_value: str = _extract_non_numeric_value(fact_elem, exception_on_transform_error)
             facts.append(TextFact(concept, context, str(fact_value), xml_id))
 
     return XbrlInstance(instance_url if instance_url else instance_path, taxonomy, facts, context_dir, unit_dir)
 
 
-def _extract_non_numeric_value(fact_elem: ET.Element) -> str:
+def _extract_non_numeric_value(fact_elem: ET.Element, exception_on_transform_error: bool = False) -> str:
     """
     This function parses a ix:nonNumeric fact as defined in:
     https://www.xbrl.org/Specification/inlineXBRL-part1/PWD-2013-02-13/inlineXBRL-part1-PWD-2013-02-13.html#d1e6391
@@ -532,14 +532,18 @@ def _extract_non_numeric_value(fact_elem: ET.Element) -> str:
         except TransformationNotImplemented:
             logging.info(f'Transformation rule {formatCode} of registry {registryPrefix} is not supported. '
                          f'The parser will just parse the value as it is and not transform it according to the rule.')
+            if exception_on_transform_error:
+                raise InstanceParseException(f'Transformation rule {formatCode} of registry {registryPrefix} is not supported. ')
             return fact_value
         except TransformationException:
             logging.warning(f'Could not transform value "{fact_value}" with format {fact_format}')
+            if exception_on_transform_error:
+                raise InstanceParseException(f'Could not transform value "{fact_value}" with format {fact_format}')
             return fact_value
     return fact_value
 
 
-def _extract_non_fraction_value(fact_elem: ET.Element) -> float or None or str:
+def _extract_non_fraction_value(fact_elem: ET.Element, exception_on_transform_error: bool = False) -> float or None or str:
     """
     https://www.xbrl.org/Specification/inlineXBRL-part1/PWD-2013-02-13/inlineXBRL-part1-PWD-2013-02-13.html#d1e5045
     :param fact_elem:
@@ -568,9 +572,13 @@ def _extract_non_fraction_value(fact_elem: ET.Element) -> float or None or str:
         except TransformationNotImplemented:
             logging.info(f'Transformation rule {formatCode} of registry {registryPrefix} is not supported. '
                          f'The parser will just parse the value as it is and not transform it according to the rule.')
+            if exception_on_transform_error:
+                raise InstanceParseException(f'Transformation rule {formatCode} of registry {registryPrefix} is not supported. ')
             return fact_value
         except TransformationException:
             logging.warning(f'Could not transform value "{fact_value}" with format {fact_format}')
+            if exception_on_transform_error:
+                raise InstanceParseException(f'Could not transform value "{fact_value}" with format {fact_format}')
             return fact_value
 
     scaled_value = float(fact_value) * pow(10, value_scale)
@@ -648,6 +656,31 @@ def _parse_context_elements(context_elements: List[ET.Element], ns_map: dict, ta
 
                 # add the explicit member to the context
                 context.segments.append(ExplicitMember(dimension_concept, member_concept))
+            for typed_member_elem in segment.findall('xbrldi:typedMember', NAME_SPACES):
+                _update_ns_map(ns_map, typed_member_elem.attrib['ns_map'])
+                dimension_prefix, dimension_concept_name = typed_member_elem.attrib['dimension'].strip().split(':')
+                member_concept_name = typed_member_elem.find('*').text.strip()
+                member_prefix = dimension_prefix
+                # get the taxonomy where the dimension attribute is defined
+                dimension_tax = taxonomy.get_taxonomy(ns_map[dimension_prefix])
+                # check if the taxonomy was found
+                if dimension_tax is None:
+                    # try to subsequently load the taxonomy
+                    dimension_tax = _load_common_taxonomy(cache, ns_map[dimension_prefix], taxonomy)
+
+                # get the taxonomy where the member attribute is defined
+                member_tax = dimension_tax if member_prefix == dimension_prefix else taxonomy.get_taxonomy(
+                    ns_map[member_prefix])
+                # check if the taxonomy was found
+                if member_tax is None:
+                    # try to subsequently load the taxonomy
+                    member_tax = _load_common_taxonomy(cache, ns_map[member_prefix], taxonomy)
+                dimension_concept: Concept = dimension_tax.concepts[dimension_tax.name_id_map[dimension_concept_name]]
+                member_concept: Concept = Concept(-1, "", member_concept_name)
+
+                # add the explicit member to the context
+                context.segments.append(ExplicitMember(dimension_concept, member_concept))
+
 
         context_dict[context_id] = context
     return context_dict
@@ -711,7 +744,7 @@ class XbrlParser:
     def __init__(self, cache: HttpCache):
         self.cache = cache
 
-    def parse_instance(self, uri: str, instance_url: str or None = None, encoding: str or None = None) -> XbrlInstance:
+    def parse_instance(self, uri: str, instance_url: str or None = None, encoding: str or None = None, exception_on_transform_error: bool = False) -> XbrlInstance:
         """
         Parses a xbrl instance (either xbrl or ixbrl)
 
@@ -729,7 +762,8 @@ class XbrlParser:
         """
         if uri.split('.')[-1] == 'xml' or uri.split('.')[-1] == 'xbrl':
             return parse_xbrl_url(uri, self.cache) if is_url(uri) else parse_xbrl(uri, self.cache, instance_url)
-        return parse_ixbrl_url(uri, self.cache) if is_url(uri) else parse_ixbrl(uri, self.cache, instance_url, encoding)
+        return parse_ixbrl_url(uri, self.cache, exception_on_transform_error=exception_on_transform_error) if is_url(uri) else \
+                parse_ixbrl(uri, self.cache, instance_url, encoding, exception_on_transform_error=exception_on_transform_error)
 
     def __str__(self) -> str:
         return 'XbrlParser with cache dir at {}'.format(self.cache.cache_dir)
